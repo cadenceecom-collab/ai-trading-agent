@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     stopDistancePct: body.stop_distance_pct ?? 0,
   }, DEFAULT_RISK_LIMITS);
 
-  const status = risk.approved ? 'approved_paper' : 'rejected_risk';
+  const status = risk.approved ? 'approved' : 'rejected';
   const clientOrderId = `paper-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
   const { data: order, error } = await supabase.from('orders').insert({
