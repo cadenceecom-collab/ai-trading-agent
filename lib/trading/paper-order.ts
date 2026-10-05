@@ -6,25 +6,27 @@ export type PaperOrder = {
   quantity: number;
   price: number;
   isCrypto: boolean;
-  currentPositionPct: number;
+  currentPositionValue: number;
   dailyLossPct: number;
   cryptoExposurePct: number;
   portfolioValue: number;
+  stopDistancePct?: number;
 };
 
 export function createPaperOrder(order: PaperOrder) {
-  if (process.env.LIVE_TRADING_ENABLED === 'true') {
-    throw new Error('Live trading is intentionally unavailable in the initial build.');
+  if (process.env.TRADING_MODE !== 'paper' || process.env.LIVE_TRADING_ENABLED === 'true') {
+    throw new Error('Paper execution requires TRADING_MODE=paper and LIVE_TRADING_ENABLED=false.');
   }
 
   const proposedValue = order.quantity * order.price;
   const risk = evaluateRisk({
     portfolioValue: order.portfolioValue,
-    proposedValue,
-    currentPositionPct: order.currentPositionPct,
+    currentPositionValue: order.currentPositionValue,
+    proposedOrderValue: proposedValue,
     dailyLossPct: order.dailyLossPct,
     cryptoExposurePct: order.cryptoExposurePct,
     isCrypto: order.isCrypto,
+    stopDistancePct: order.stopDistancePct ?? 0,
   });
 
   return {
