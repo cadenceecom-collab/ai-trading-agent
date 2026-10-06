@@ -1,17 +1,16 @@
 export type KrakenStatus={configured:boolean;reachable:boolean;message?:string};
 const API='https://api.kraken.com/0/public';
-function configured(){return Boolean(process.env.KRAKEN_API_KEY&&process.env.KRAKEN_API_SECRET);}
 async function request<T>(path:string):Promise<T>{
  const r=await fetch(API+path,{cache:'no-store',headers:{Accept:'application/json'}});
- const text=await r.text(); let data:any; try{data=JSON.parse(text)}catch{throw new Error('Invalid Kraken response');}
+ const text=await r.text();let data:any;
+ try{data=JSON.parse(text)}catch{throw new Error('Invalid Kraken response');}
  if(!r.ok)throw new Error(`Kraken HTTP ${r.status}`);
  if(Array.isArray(data.error)&&data.error.length)throw new Error(data.error.join('; '));
  return data as T;
 }
 export const kraken={
- isConfigured:configured,
+ isConfigured:()=>true,
  async getStatus():Promise<KrakenStatus>{
-  if(!configured())return{configured:false,reachable:false,message:'Kraken API credentials are not configured.'};
   try{await request('/SystemStatus');return{configured:true,reachable:true,message:'Kraken public market-data API reachable.'}}
   catch(e){return{configured:true,reachable:false,message:e instanceof Error?e.message:'Unable to reach Kraken.'}}
  },
