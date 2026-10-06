@@ -1,0 +1,8 @@
+export type ExecutionRequest={venue:string;symbol:string;side:'buy'|'sell';quantity:number;price:number;orderType?:'market'|'limit'|'stop'};
+export type ExecutionResult={accepted:boolean;mode:'paper'|'live';status:'simulated_fill'|'rejected';venue:string;symbol:string;side:'buy'|'sell';quantity:number;fillPrice:number;reason:string;executedAt:string};
+export async function executeTrade(request:ExecutionRequest):Promise<ExecutionResult>{
+ const now=new Date().toISOString();
+ if(process.env.TRADING_MODE!=='paper'||process.env.LIVE_TRADING_ENABLED==='true')return{accepted:false,mode:'live',status:'rejected',venue:request.venue,symbol:request.symbol,side:request.side,quantity:request.quantity,fillPrice:0,reason:'Live execution is disabled. No broker order was submitted.',executedAt:now};
+ if(!Number.isFinite(request.quantity)||request.quantity<=0||!Number.isFinite(request.price)||request.price<=0)return{accepted:false,mode:'paper',status:'rejected',venue:request.venue,symbol:request.symbol,side:request.side,quantity:request.quantity,fillPrice:0,reason:'Invalid quantity or price.',executedAt:now};
+ return{accepted:true,mode:'paper',status:'simulated_fill',venue:request.venue,symbol:request.symbol,side:request.side,quantity:request.quantity,fillPrice:request.price,reason:'Paper execution simulated at the supplied market/limit reference price. No real order was submitted.',executedAt:now};
+}
