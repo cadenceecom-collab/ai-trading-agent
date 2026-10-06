@@ -1,5 +1,3 @@
-import 'server-only';
-
 export type IBKRStatus = {
   connected: boolean;
   authenticated: boolean;
