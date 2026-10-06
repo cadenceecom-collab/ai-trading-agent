@@ -1,0 +1,2 @@
+import {NextRequest,NextResponse} from 'next/server';import {bitget} from '@/lib/brokers/bitget';
+export async function GET(req:NextRequest){const symbol=req.nextUrl.searchParams.get('symbol')??'BTCUSDT';const category=req.nextUrl.searchParams.get('category')??'SPOT';try{return NextResponse.json({broker:'Bitget',symbol,category,ticker:await bitget.getTicker(symbol,category),orderSubmission:'disabled'})}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Bitget ticker request failed.'},{status:502})}}
