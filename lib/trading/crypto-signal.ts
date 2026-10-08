@@ -3,7 +3,7 @@ export type CryptoSignal={action:'buy'|'sell'|'hold';score:number;confidence:num
 function avg(xs:number[]){return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:null}
 function sma(xs:number[],n:number){return xs.length>=n?avg(xs.slice(-n)):null}
 export function scoreCrypto(candles:CryptoCandle[],spreadPct:number,venueCount:number):CryptoSignal{
- const closes=candles.map(c=>c.close).filter(Number.isFinite);const latest=closes.at(-1)??0;const sma20=sma(closes,20);const sma50=sma(closes,50);const momentum20=closes.length>=21?(latest/closes.at(-21)!-1)*100:null;
+ const closes=[...candles].filter(c=>Number.isFinite(c.timestamp)&&Number.isFinite(c.close)&&c.close>0).sort((a,b)=>a.timestamp-b.timestamp).map(c=>c.close);const latest=closes.at(-1)??0;const sma20=sma(closes,20);const sma50=sma(closes,50);const momentum20=closes.length>=21?(latest/closes.at(-21)!-1)*100:null;
  let score=50;const reasons:string[]=[];
  if(sma20!==null){if(latest>sma20){score+=12;reasons.push('price above SMA20')}else{score-=12;reasons.push('price below SMA20')}}
  if(sma50!==null){if(latest>sma50){score+=12;reasons.push('price above SMA50')}else{score-=12;reasons.push('price below SMA50')}}
