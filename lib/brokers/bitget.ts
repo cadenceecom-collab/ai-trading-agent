@@ -149,15 +149,17 @@ export const bitget = {
     category?: string;
   }) {
     const category = input.category ?? 'SPOT';
+    const limitFields =
+      input.orderType === 'limit'
+        ? { price: input.price, timeInForce: 'gtc' }
+        : {};
     const body = {
       category,
       symbol: input.symbol,
       side: input.side,
       orderType: input.orderType,
       qty: input.qty,
-      ...(input.orderType === 'limit'
-        ? { price: input.price, timeInForce: 'gtc' }
-        : {}),
+      ...limitFields,
     };
     return privateRequest('POST', '/api/v3/trade/place-order', body);
   },
