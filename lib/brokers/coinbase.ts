@@ -21,14 +21,9 @@ function base64url(value: string | Buffer) {
   return Buffer.from(value).toString('base64url');
 }
 
-/**
- * Coinbase CDP Advanced Trade API keys use an EC private key and ES256 JWT.
- * Keep key material server-side; never return tokens or credentials to clients.
- */
 function makeJwt(method: string, path: string): string {
   const { keyId, rawSecret } = credentials();
   if (!keyId || !rawSecret) throw new Error('Coinbase CDP API key credentials are not configured.');
-
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'ES256', typ: 'JWT', kid: keyId, nonce: randomBytes(16).toString('hex') };
   const payload = {
@@ -49,10 +44,7 @@ function makeJwt(method: string, path: string): string {
 }
 
 async function publicRequest<T>(path: string): Promise<T> {
-  const response = await fetch(API + path, {
-    cache: 'no-store',
-    headers: { Accept: 'application/json' },
-  });
+  const response = await fetch(API + path, { cache: 'no-store', headers: { Accept: 'application/json' } });
   const text = await response.text();
   let data: any;
   try { data = JSON.parse(text); } catch { throw new Error('Invalid Coinbase public API response.'); }
@@ -77,7 +69,6 @@ async function privateRequest<T>(method: 'GET' | 'POST', path: string, body?: un
   let data: any;
   try { data = JSON.parse(text); } catch { throw new Error(`Invalid Coinbase private API response (HTTP ${response.status}).`); }
   if (!response.ok) {
-    // Avoid reflecting request headers, key material, or the JWT in errors.
     const message = typeof data?.message === 'string' ? data.message : 'Private API request rejected.';
     throw new Error(`Coinbase private API HTTP ${response.status}: ${message.slice(0, 180)}`);
   }
