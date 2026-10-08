@@ -9,7 +9,7 @@ export type CoinbaseStatus = {
 };
 
 const HOST = 'api.coinbase.com';
-const API = `https://${HOST}/api/v3/brokerage';
+const API = `https://${HOST}/api/v3/brokerage`;
 
 function credentials() {
   const keyId = process.env.COINBASE_API_KEY?.trim();
@@ -33,11 +33,11 @@ function makeJwt(method: string, path: string): string {
     nbf: now,
     iat: now,
     exp: now + 120,
-    uris: [`${method} ${HOST}${path}`],
+    uris: [method + ' ' + HOST + path],
   };
 
   const signingInput = (header: Record<string, string>) =>
-    `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
+    base64url(JSON.stringify(header)) + '.' + base64url(JSON.stringify(payload));
   const nonce = randomBytes(16).toString('hex');
 
   if (normalizedSecret.includes('-----BEGIN')) {
@@ -47,11 +47,9 @@ function makeJwt(method: string, path: string): string {
       key: createPrivateKey(normalizedSecret),
       dsaEncoding: 'ieee-p1363',
     });
-    return `${unsigned}.${base64url(signature)}`;
+    return unsigned + '.' + base64url(signature);
   }
 
-  // Coinbase CDP Ed25519 secrets are base64-encoded 64-byte values:
-  // 32-byte private seed followed by the 32-byte public key.
   const decoded = Buffer.from(normalizedSecret, 'base64');
   const canonicalInput = normalizedSecret.replace(/=+$/, '');
   const canonicalDecoded = decoded.toString('base64').replace(/=+$/, '');
@@ -70,7 +68,7 @@ function makeJwt(method: string, path: string): string {
     const header = { alg: 'EdDSA', kid: keyId, typ: 'JWT', nonce };
     const unsigned = signingInput(header);
     const signature = cryptoSign(null, Buffer.from(unsigned), key);
-    return `${unsigned}.${base64url(signature)}`;
+    return unsigned + '.' + base64url(signature);
   }
 
   throw new Error('Unsupported Coinbase key format. Expected a complete EC PEM private key or a Base64 Ed25519 CDP secret.');
