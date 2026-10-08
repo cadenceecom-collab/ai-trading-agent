@@ -24,7 +24,7 @@ export function createPaperOrder(order: PaperOrder) {
     currentPositionValue: order.currentPositionValue,
     proposedOrderValue: proposedValue,
     dailyLossPct: order.dailyLossPct,
-    cryptoExposurePct: order.cryptoExposurePct,
+    currentCryptoExposurePct: order.cryptoExposurePct,
     isCrypto: order.isCrypto,
     stopDistancePct: order.stopDistancePct ?? 0,
   });
