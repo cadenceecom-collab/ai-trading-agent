@@ -14,8 +14,9 @@ export async function GET() {
 
   try {
     const response = await kraken.getBalance() as { result?: Record<string, string> };
+    const displayAsset = (asset: string) => ({ ZCAD: 'CAD', ZUSD: 'USD', XXBT: 'BTC', XBT: 'BTC', XETH: 'ETH', ZEUR: 'EUR', ZGBP: 'GBP', ZJPY: 'JPY', XXDG: 'DOGE' } as Record<string, string>)[asset] ?? asset;
     const balances = Object.entries(response.result ?? {})
-      .map(([asset, amount]) => ({ asset, amount: Number(amount) }))
+      .map(([asset, amount]) => ({ asset: displayAsset(asset), krakenAssetCode: asset, amount: Number(amount) }))
       .filter((item) => Number.isFinite(item.amount) && item.amount !== 0)
       .sort((a, b) => b.amount - a.amount);
 
