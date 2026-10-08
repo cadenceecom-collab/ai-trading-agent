@@ -11,6 +11,6 @@ export const bitget={
  async getTicker(symbol='BTCUSDT',category='SPOT'){return publicRequest(`/api/v3/market/tickers?category=${encodeURIComponent(category)}&symbol=${encodeURIComponent(symbol)}`)},
  async getCandles(symbol='BTCUSDT',interval='1D',category='SPOT',limit=1000){return publicRequest(`/api/v3/market/candles?category=${encodeURIComponent(category)}&symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${Math.min(Math.max(limit,1),1000)}`)},
  async getInstruments(category='SPOT'){return publicRequest(`/api/v3/market/instruments?category=${encodeURIComponent(category)}`)},
- async getAccount(category='SPOT'){return privateRequest(`GET`,`/api/v3/account/assets?category=${encodeURIComponent(category)}`)},
- async placeDemoOrder(input:{symbol:string;side:'buy'|'sell';orderType:'market'|'limit';qty:string;price?:string;category?:string}){const category=input.category??'SPOT';return privateRequest('POST','/api/v3/trade/place-order',{category,symbol:input.symbol,side:input.side,orderType:input.orderType,qty:input.qty,...(input.orderType==='limit'?{price:input.price,timeInForce:'gtc'}:{}});},
+ async getAccount(category='SPOT'){return privateRequest('GET',`/api/v3/account/assets?category=${encodeURIComponent(category)}`)},
+ async placeDemoOrder(input:{symbol:string;side:'buy'|'sell';orderType:'market'|'limit';qty:string;price?:string;category?:string}){const category=input.category??'SPOT';return privateRequest('POST','/api/v3/trade/place-order',{category,symbol:input.symbol,side:input.side,orderType:input.orderType,qty:input.qty,...(input.orderType==='limit'?{price:input.price,timeInForce:'gtc'}:{})});},
 };
