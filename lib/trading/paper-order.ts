@@ -27,6 +27,7 @@ export function createPaperOrder(order: PaperOrder) {
     currentCryptoExposurePct: order.cryptoExposurePct,
     isCrypto: order.isCrypto,
     stopDistancePct: order.stopDistancePct ?? 0,
+    side: order.side,
   });
 
   return {
