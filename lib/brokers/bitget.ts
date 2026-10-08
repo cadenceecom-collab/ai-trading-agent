@@ -1,16 +1,164 @@
-import {createHmac} from 'node:crypto';
-export type BitgetStatus={configured:boolean;reachable:boolean;message?:string;demoConfigured?:boolean};
-const API='https://api.bitget.com';
-async function publicRequest<T>(path:string):Promise<T>{const r=await fetch(API+path,{cache:'no-store',headers:{Accept:'application/json'}});const text=await r.text();let data:any;try{data=JSON.parse(text)}catch{throw new Error('Invalid Bitget response');}if(!r.ok)throw new Error(`Bitget HTTP ${r.status}`);if(data?.code&&data.code!=='00000')throw new Error(data.msg||`Bitget API error ${data.code}`);return data as T;}
-function demoConfigured(){return Boolean(process.env.BITGET_API_KEY&&process.env.BITGET_API_SECRET&&process.env.BITGET_API_PASSPHRASE);}
-async function privateRequest<T>(method:'GET'|'POST',path:string,body?:unknown):Promise<T>{if(!demoConfigured())throw new Error('Bitget demo API credentials are not configured.');const timestamp=String(Date.now());const bodyText=body?JSON.stringify(body):'';const payload=timestamp+method+path+bodyText;const sign=createHmac('sha256',process.env.BITGET_API_SECRET!).update(payload).digest('base64');const r=await fetch(API+path,{method,body:bodyText||undefined,cache:'no-store',headers:{'ACCESS-KEY':process.env.BITGET_API_KEY!,'ACCESS-SIGN':sign,'ACCESS-TIMESTAMP':timestamp,'ACCESS-PASSPHRASE':process.env.BITGET_API_PASSPHRASE!,'Content-Type':'application/json',locale:'en-US',paptrading:'1',Accept:'application/json'}});const text=await r.text();let data:any;try{data=JSON.parse(text)}catch{throw new Error('Invalid Bitget private response');}if(!r.ok)throw new Error(`Bitget HTTP ${r.status}: ${data?.msg||''}`);if(data?.code&&data.code!=='00000')throw new Error(data.msg||`Bitget API error ${data.code}`);return data as T;}
-export const bitget={
- isConfigured:()=>true,
- isDemoConfigured:demoConfigured,
- async getStatus():Promise<BitgetStatus>{try{await publicRequest('/api/v3/market/tickers?category=SPOT&symbol=BTCUSDT');return{configured:true,reachable:true,demoConfigured:demoConfigured(),message:demoConfigured()?'Bitget market data reachable; demo trading credentials configured.':'Bitget market data reachable; demo credentials not configured.'}}catch(e){return{configured:true,reachable:false,demoConfigured:demoConfigured(),message:e instanceof Error?e.message:'Unable to reach Bitget.'}}},
- async getTicker(symbol='BTCUSDT',category='SPOT'){return publicRequest(`/api/v3/market/tickers?category=${encodeURIComponent(category)}&symbol=${encodeURIComponent(symbol)}`)},
- async getCandles(symbol='BTCUSDT',interval='1D',category='SPOT',limit=1000){return publicRequest(`/api/v3/market/candles?category=${encodeURIComponent(category)}&symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${Math.min(Math.max(limit,1),1000)}`)},
- async getInstruments(category='SPOT'){return publicRequest(`/api/v3/market/instruments?category=${encodeURIComponent(category)}`)},
- async getAccount(category='SPOT'){return privateRequest('GET',`/api/v3/account/assets?category=${encodeURIComponent(category)}`)},
- async placeDemoOrder(input:{symbol:string;side:'buy'|'sell';orderType:'market'|'limit';qty:string;price?:string;category?:string}){const category=input.category??'SPOT';return privateRequest('POST','/api/v3/trade/place-order',{category,symbol:input.symbol,side:input.side,orderType:input.orderType,qty:input.qty,...(input.orderType==='limit'?{price:input.price,timeInForce:'gtc'}:{})});},
+import { createHmac } from 'node:crypto';
+
+export type BitgetStatus = {
+  configured: boolean;
+  reachable: boolean;
+  message?: string;
+  demoConfigured?: boolean;
+};
+
+const API = 'https://api.bitget.com';
+
+async function publicRequest<T>(path: string): Promise<T> {
+  const response = await fetch(API + path, {
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+  });
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Invalid Bitget response');
+  }
+  if (!response.ok) throw new Error(`Bitget HTTP ${response.status}`);
+  if (data?.code && data.code !== '00000') {
+    throw new Error(data.msg || `Bitget API error ${data.code}`);
+  }
+  return data as T;
+}
+
+function demoConfigured() {
+  return Boolean(
+    process.env.BITGET_API_KEY &&
+      process.env.BITGET_API_SECRET &&
+      process.env.BITGET_API_PASSPHRASE,
+  );
+}
+
+async function privateRequest<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  if (!demoConfigured()) {
+    throw new Error('Bitget demo API credentials are not configured.');
+  }
+
+  const timestamp = String(Date.now());
+  const bodyText = body ? JSON.stringify(body) : '';
+  const payload = timestamp + method + path + bodyText;
+  const sign = createHmac('sha256', process.env.BITGET_API_SECRET!)
+    .update(payload)
+    .digest('base64');
+
+  const response = await fetch(API + path, {
+    method,
+    body: bodyText || undefined,
+    cache: 'no-store',
+    headers: {
+      'ACCESS-KEY': process.env.BITGET_API_KEY!,
+      'ACCESS-SIGN': sign,
+      'ACCESS-TIMESTAMP': timestamp,
+      'ACCESS-PASSPHRASE': process.env.BITGET_API_PASSPHRASE!,
+      'Content-Type': 'application/json',
+      locale: 'en-US',
+      paptrading: '1',
+      Accept: 'application/json',
+    },
+  });
+
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Invalid Bitget private response');
+  }
+  if (!response.ok) {
+    throw new Error(`Bitget HTTP ${response.status}: ${data?.msg || ''}`);
+  }
+  if (data?.code && data.code !== '00000') {
+    throw new Error(data.msg || `Bitget API error ${data.code}`);
+  }
+  return data as T;
+}
+
+export const bitget = {
+  isConfigured: () => true,
+  isDemoConfigured: demoConfigured,
+
+  async getStatus(): Promise<BitgetStatus> {
+    try {
+      await publicRequest('/api/v3/market/tickers?category=SPOT&symbol=BTCUSDT');
+      return {
+        configured: true,
+        reachable: true,
+        demoConfigured: demoConfigured(),
+        message: demoConfigured()
+          ? 'Bitget market data reachable; demo trading credentials configured.'
+          : 'Bitget market data reachable; demo credentials not configured.',
+      };
+    } catch (error) {
+      return {
+        configured: true,
+        reachable: false,
+        demoConfigured: demoConfigured(),
+        message: error instanceof Error ? error.message : 'Unable to reach Bitget.',
+      };
+    }
+  },
+
+  async getTicker(symbol = 'BTCUSDT', category = 'SPOT') {
+    return publicRequest(
+      `/api/v3/market/tickers?category=${encodeURIComponent(category)}&symbol=${encodeURIComponent(symbol)}`,
+    );
+  },
+
+  async getCandles(
+    symbol = 'BTCUSDT',
+    interval = '1D',
+    category = 'SPOT',
+    limit = 1000,
+  ) {
+    const safeLimit = Math.min(Math.max(limit, 1), 1000);
+    return publicRequest(
+      `/api/v3/market/candles?category=${encodeURIComponent(category)}&symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${safeLimit}`,
+    );
+  },
+
+  async getInstruments(category = 'SPOT') {
+    return publicRequest(
+      `/api/v3/market/instruments?category=${encodeURIComponent(category)}`,
+    );
+  },
+
+  async getAccount(category = 'SPOT') {
+    return privateRequest(
+      'GET',
+      `/api/v3/account/assets?category=${encodeURIComponent(category)}`,
+    );
+  },
+
+  async placeDemoOrder(input: {
+    symbol: string;
+    side: 'buy' | 'sell';
+    orderType: 'market' | 'limit';
+    qty: string;
+    price?: string;
+    category?: string;
+  }) {
+    const category = input.category ?? 'SPOT';
+    const body = {
+      category,
+      symbol: input.symbol,
+      side: input.side,
+      orderType: input.orderType,
+      qty: input.qty,
+      ...(input.orderType === 'limit'
+        ? { price: input.price, timeInForce: 'gtc' }
+        : {}),
+    };
+    return privateRequest('POST', '/api/v3/trade/place-order', body);
+  },
 };
