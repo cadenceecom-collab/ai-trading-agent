@@ -13,8 +13,12 @@ export async function POST(req:NextRequest){
   if(!asset?.id)return NextResponse.json({error:'Asset is not registered in the trading catalog.'},{status:404});
   const {data:account}=await supabase.from('accounts').select('id').eq('account_type','paper').eq('is_enabled',true).limit(1).maybeSingle();
   if(!account?.id)return NextResponse.json({error:'Enabled paper account not found.'},{status:404});
-  const {data:order,error:orderError}=await supabase.from('orders').insert({account_id:account.id,asset_id:asset.id,venue_id:venue?.id??null,side:result.side,order_type:b.orderType??'market',quantity:result.quantity,limit_price:result.fillPrice,status:'filled',submitted_at:result.executedAt,filled_at:result.executedAt,client_order_id:`paper-exec-${Date.now()}-${crypto.randomUUID().slice(0,8)}`}).select('id').single();
+  const {data:order,error:orderError}=await supabase.from('orders').insert({account_id:account.id,asset_id:asset.id,venue_id:venue?.id??null,side:result.side,order_type:b.orderType??'market',quantity:result.quantity,limit_price:result.fillPrice,status:result.status==='submitted'?'submitted':'filled',external_order_id:result.externalOrderId??null,submitted_at:result.executedAt,filled_at:result.status==='simulated_fill'?result.executedAt:null,client_order_id:`paper-exec-${Date.now()}-${crypto.randomUUID().slice(0,8)}`}).select('id').single();
   if(orderError||!order)return NextResponse.json({error:orderError?.message??'Unable to create paper order.'},{status:500});
+  if(result.status==='submitted'){
+   await supabase.from('audit_log').insert({event_type:'demo_order_submitted',severity:'info',entity_type:'order',entity_id:order.id,message:'Order accepted by the exchange demo environment; it is not recorded as filled and no position was changed.',metadata:{...result,externalOrderId:result.externalOrderId??null}});
+   return NextResponse.json({...result,orderId:order.id,filled:false},{status:202});
+  }
   const {error:execError}=await supabase.from('executions').insert({order_id:order.id,quantity:result.quantity,price:result.fillPrice,fee:0,fee_currency:'CAD',executed_at:result.executedAt});
   if(execError)return NextResponse.json({error:execError.message,orderId:order.id},{status:500});
   const {data:existing}=await supabase.from('positions').select('id,quantity,average_price').eq('account_id',account.id).eq('asset_id',asset.id).maybeSingle();
