@@ -1,32 +1,57 @@
-import {NextRequest,NextResponse} from 'next/server';
-import {getSupabaseAdmin} from '@/lib/supabase-admin';
-import {executeTrade} from '@/lib/trading/execution-router';
-import {applyPaperFill} from '@/lib/trading/paper-ledger';
-export async function POST(req:NextRequest){
- if(process.env.TRADING_MODE!=='paper'||process.env.LIVE_TRADING_ENABLED==='true')return NextResponse.json({error:'Paper execution requires paper mode and live trading disabled.'},{status:403});
- const supabase=getSupabaseAdmin();if(!supabase)return NextResponse.json({error:'Server database credentials are not configured.'},{status:503});
- try{
-  const b=await req.json();const result=await executeTrade({venue:String(b.venue),symbol:String(b.symbol),side:b.side,quantity:Number(b.quantity),price:Number(b.price),orderType:b.orderType});
-  if(!result.accepted)return NextResponse.json(result,{status:422});
-  const {data:asset}=await supabase.from('assets').select('id,asset_type').eq('symbol',result.symbol).maybeSingle();
-  const {data:venue}=await supabase.from('venues').select('id').eq('name',result.venue).maybeSingle();
-  if(!asset?.id)return NextResponse.json({error:'Asset is not registered in the trading catalog.'},{status:404});
-  const {data:account}=await supabase.from('accounts').select('id').eq('account_type','paper').eq('is_enabled',true).limit(1).maybeSingle();
-  if(!account?.id)return NextResponse.json({error:'Enabled paper account not found.'},{status:404});
-  const {data:order,error:orderError}=await supabase.from('orders').insert({account_id:account.id,asset_id:asset.id,venue_id:venue?.id??null,side:result.side,order_type:b.orderType??'market',quantity:result.quantity,limit_price:result.fillPrice,status:result.status==='submitted'?'submitted':'filled',external_order_id:result.externalOrderId??null,submitted_at:result.executedAt,filled_at:result.status==='simulated_fill'?result.executedAt:null,client_order_id:`paper-exec-${Date.now()}-${crypto.randomUUID().slice(0,8)}`}).select('id').single();
-  if(orderError||!order)return NextResponse.json({error:orderError?.message??'Unable to create paper order.'},{status:500});
-  if(result.status==='submitted'){
-   await supabase.from('audit_log').insert({event_type:'demo_order_submitted',severity:'info',entity_type:'order',entity_id:order.id,message:'Order accepted by the exchange demo environment; it is not recorded as filled and no position was changed.',metadata:{...result,externalOrderId:result.externalOrderId??null}});
-   return NextResponse.json({...result,orderId:order.id,filled:false},{status:202});
+import { NextResponse } from 'next/server';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * Fail-closed paper execution gate.
+ *
+ * The previous handler trusted price, quantity, portfolio value and exposure
+ * supplied by the browser. Those values are not a safe basis for risk checks.
+ * Execution stays disabled until the server can calculate account equity,
+ * current exposure and daily loss from trusted market/account data.
+ */
+export async function POST() {
+  if (process.env.TRADING_MODE !== 'paper' || process.env.LIVE_TRADING_ENABLED === 'true') {
+    return NextResponse.json(
+      { status: 'blocked', error: 'Execution is locked unless paper mode is enabled and live trading is disabled.' },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } },
+    );
   }
-  const {error:execError}=await supabase.from('executions').insert({order_id:order.id,quantity:result.quantity,price:result.fillPrice,fee:0,fee_currency:'CAD',executed_at:result.executedAt});
-  if(execError)return NextResponse.json({error:execError.message,orderId:order.id},{status:500});
-  const {data:existing}=await supabase.from('positions').select('id,quantity,average_price').eq('account_id',account.id).eq('asset_id',asset.id).maybeSingle();
-  const next=applyPaperFill(existing?{quantity:Number(existing.quantity),averagePrice:Number(existing.average_price),marketValue:0,unrealizedPnl:0}:null,result.side,result.quantity,result.fillPrice,result.fillPrice);
-  if(next.quantity===0&&existing?.id)await supabase.from('positions').delete().eq('id',existing.id);
-  else if(existing?.id)await supabase.from('positions').update({quantity:next.quantity,average_price:next.averagePrice,market_value:next.marketValue,unrealized_pnl:next.unrealizedPnl,updated_at:result.executedAt}).eq('id',existing.id);
-  else await supabase.from('positions').insert({account_id:account.id,asset_id:asset.id,quantity:next.quantity,average_price:next.averagePrice,market_value:next.marketValue,unrealized_pnl:next.unrealizedPnl,updated_at:result.executedAt});
-  await supabase.from('audit_log').insert({event_type:'paper_execution',severity:'info',entity_type:'order',entity_id:order.id,message:'Paper execution simulated and portfolio position updated; no live broker order submitted.',metadata:{...result,position:next}});
-  return NextResponse.json({...result,orderId:order.id,position:next},{status:201});
- }catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Invalid paper execution request.'},{status:400})}
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json(
+      { status: 'not_configured', error: 'Server database credentials are not configured.' },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  const message =
+    'Paper execution is temporarily blocked: trusted server-side portfolio equity, exposure, daily-loss and market-price validation must be available before an order can be simulated.';
+  try {
+    await supabase.from('audit_log').insert({
+      event_type: 'paper_execution_blocked',
+      severity: 'warning',
+      message,
+      metadata: {
+        reason: 'trusted_risk_inputs_unavailable',
+        tradingMode: process.env.TRADING_MODE ?? 'paper',
+        liveTradingEnabled: process.env.LIVE_TRADING_ENABLED === 'true',
+      },
+    });
+  } catch {
+    // The safety gate remains closed even if audit logging is unavailable.
+  }
+
+  return NextResponse.json(
+    {
+      status: 'blocked',
+      mode: 'paper',
+      liveTradingEnabled: false,
+      orderSubmission: 'disabled',
+      error: message,
+    },
+    { status: 409, headers: { 'Cache-Control': 'no-store' } },
+  );
 }
