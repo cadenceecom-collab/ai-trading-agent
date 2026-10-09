@@ -21,57 +21,53 @@ function base64url(value: string | Buffer) {
   return Buffer.from(value).toString('base64url');
 }
 
+/** Advanced Trade REST uses a request-scoped CDP JWT; support EC PEM and Ed25519 Base64 secrets. */
 function makeJwt(method: string, path: string): string {
   const { keyId, rawSecret } = credentials();
   if (!keyId || !rawSecret) throw new Error('Coinbase CDP API key credentials are not configured.');
 
   const now = Math.floor(Date.now() / 1000);
-  const normalizedSecret = rawSecret.replace(/\\n/g, '\n').trim();
+  const secret = rawSecret.replace(/\\n/g, '\n').trim();
   const payload = {
     iss: 'cdp',
     sub: keyId,
     nbf: now,
     iat: now,
     exp: now + 120,
-    uris: [method + ' ' + HOST + path],
+    uri: method + ' ' + HOST + path,
   };
-
-  const signingInput = (header: Record<string, string>) =>
-    base64url(JSON.stringify(header)) + '.' + base64url(JSON.stringify(payload));
   const nonce = randomBytes(16).toString('hex');
 
-  if (normalizedSecret.includes('-----BEGIN')) {
+  if (secret.includes('-----BEGIN')) {
     const header = { alg: 'ES256', kid: keyId, typ: 'JWT', nonce };
-    const unsigned = signingInput(header);
+    const unsigned = base64url(JSON.stringify(header)) + '.' + base64url(JSON.stringify(payload));
     const signature = cryptoSign('sha256', Buffer.from(unsigned), {
-      key: createPrivateKey(normalizedSecret),
+      key: createPrivateKey(secret),
       dsaEncoding: 'ieee-p1363',
     });
     return unsigned + '.' + base64url(signature);
   }
 
-  const decoded = Buffer.from(normalizedSecret, 'base64');
-  const canonicalInput = normalizedSecret.replace(/=+$/, '');
+  const decoded = Buffer.from(secret, 'base64');
+  const canonicalInput = secret.replace(/=+$/, '');
   const canonicalDecoded = decoded.toString('base64').replace(/=+$/, '');
   if (decoded.length === 64 && canonicalDecoded === canonicalInput) {
-    const seed = decoded.subarray(0, 32);
-    const publicKey = decoded.subarray(32);
     const key = createPrivateKey({
       key: {
         kty: 'OKP',
         crv: 'Ed25519',
-        d: seed.toString('base64url'),
-        x: publicKey.toString('base64url'),
+        d: decoded.subarray(0, 32).toString('base64url'),
+        x: decoded.subarray(32).toString('base64url'),
       },
       format: 'jwk',
     });
     const header = { alg: 'EdDSA', kid: keyId, typ: 'JWT', nonce };
-    const unsigned = signingInput(header);
+    const unsigned = base64url(JSON.stringify(header)) + '.' + base64url(JSON.stringify(payload));
     const signature = cryptoSign(null, Buffer.from(unsigned), key);
     return unsigned + '.' + base64url(signature);
   }
 
-  throw new Error('Unsupported Coinbase key format. Expected a complete EC PEM private key or a Base64 Ed25519 CDP secret.');
+  throw new Error('Unsupported Coinbase key format. Expected a complete EC PEM private key or Base64 Ed25519 CDP secret.');
 }
 
 async function publicRequest<T>(path: string): Promise<T> {
@@ -100,8 +96,9 @@ async function privateRequest<T>(method: 'GET' | 'POST', path: string, body?: un
   let data: any;
   try { data = JSON.parse(text); } catch { throw new Error(`Invalid Coinbase private API response (HTTP ${response.status}).`); }
   if (!response.ok) {
-    const message = typeof data?.message === 'string' ? data.message : 'Private API request rejected.';
-    throw new Error(`Coinbase private API HTTP ${response.status}: ${message.slice(0, 180)}`);
+    const message = [data?.message, data?.error, data?.error_details]
+      .find((item) => typeof item === 'string' && item.length > 0);
+    throw new Error(`Coinbase private API HTTP ${response.status}: ${(message || 'Private API request rejected.').slice(0, 180)}`);
   }
   return data as T;
 }
