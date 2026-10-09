@@ -1,2 +1,0 @@
-import {NextRequest,NextResponse} from 'next/server';import {getCryptoConsensus} from '@/lib/trading/market-data';
-export async function GET(req:NextRequest){const symbol=(req.nextUrl.searchParams.get('symbol')??'BTC').replace(/[^A-Za-z0-9]/g,'').toUpperCase();if(!symbol)return NextResponse.json({error:'Invalid symbol.'},{status:400});try{return NextResponse.json({market:'crypto',...await getCryptoConsensus(symbol),orderSubmission:'disabled'})}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Crypto consensus failed.'},{status:502})}}

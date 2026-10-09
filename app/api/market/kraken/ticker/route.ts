@@ -1,2 +1,0 @@
-import {NextRequest,NextResponse} from 'next/server';import {kraken} from '@/lib/brokers/kraken';
-export async function GET(req:NextRequest){const pair=req.nextUrl.searchParams.get('pair')??'XBTUSD';try{return NextResponse.json({broker:'Kraken',pair,ticker:await kraken.getTicker(pair),orderSubmission:'disabled'})}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Kraken ticker request failed.'},{status:502})}}

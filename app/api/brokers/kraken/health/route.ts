@@ -1,2 +1,0 @@
-import {NextResponse} from 'next/server';import {kraken} from '@/lib/brokers/kraken';
-export async function GET(){const status=await kraken.getStatus();return NextResponse.json({broker:'Kraken',role:'crypto market data',...status,tradingMode:process.env.TRADING_MODE??'paper',liveTradingEnabled:process.env.LIVE_TRADING_ENABLED==='true',orderSubmission:'disabled'});}
