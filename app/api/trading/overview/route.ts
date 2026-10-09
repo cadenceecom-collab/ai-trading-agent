@@ -47,15 +47,15 @@ export async function GET() {
     );
   }
 
+  // supabase-js converts thrown fetch errors into PostgREST errors, so retain
+  // the sanitized original cause separately for the response diagnostics.
+  let networkFetchError: ReturnType<typeof safeFetchError> | null = null;
   const diagnosticFetch: typeof fetch = async (input, init) => {
     try {
       return await fetch(input, init);
     } catch (error) {
-      const info = safeFetchError(error);
-      const wrapped = new Error(
-        `Supabase network fetch failed for ${hostname}: ${info.causeCode ?? info.name}${info.causeMessage ? ` — ${info.causeMessage}` : ""}`,
-      );
-      throw wrapped;
+      networkFetchError = safeFetchError(error);
+      throw error;
     }
   };
 
@@ -75,7 +75,14 @@ export async function GET() {
     const firstError = accountResult.error ?? positionsResult.error ?? signalsResult.error ?? ordersResult.error ?? rulesResult.error;
     if (firstError) {
       return NextResponse.json(
-        { error: "Unable to load the trading overview from Supabase.", details: firstError.message, hostname },
+        {
+          error: "Unable to load the trading overview from Supabase.",
+          details: firstError.message,
+          ...(networkFetchError ? { networkDiagnostics: networkFetchError } : {}),
+          hostname,
+          deploymentEnvironment: process.env.VERCEL_ENV ?? "unknown",
+          gitBranch: process.env.VERCEL_GIT_COMMIT_REF ?? "unknown",
+        },
         { status: 502 },
       );
     }
@@ -94,6 +101,7 @@ export async function GET() {
       {
         error: "Unable to load the trading overview from Supabase.",
         details: safeFetchError(error),
+        ...(networkFetchError ? { networkDiagnostics: networkFetchError } : {}),
         hostname,
         deploymentEnvironment: process.env.VERCEL_ENV ?? "unknown",
         gitBranch: process.env.VERCEL_GIT_COMMIT_REF ?? "unknown",
