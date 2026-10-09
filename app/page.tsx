@@ -61,7 +61,7 @@ export default function Home(){
   }catch(e){setError(e instanceof Error?e.message:'Unable to save signals')}finally{setBusy(false)}
  }
  useEffect(()=>{void load()},[]);
- const connections=[['IBKR',health.ibkr],['Kraken',health.kraken],['Coinbase',health.coinbase],['Bitget',health.bitget]];
+ const connections: Array<[string,Health|undefined]>=[['IBKR',health.ibkr],['Kraken',health.kraken],['Coinbase',health.coinbase],['Bitget',health.bitget]];
  return <main className="shell">
   <header className="topbar">
    <div><div className="brand">AI Trading Agent</div><div className="sub">Stocks + crypto · Research and paper trading</div></div>
