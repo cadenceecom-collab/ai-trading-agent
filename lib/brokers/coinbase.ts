@@ -25,6 +25,9 @@ function base64url(value: string | Buffer) {
 function makeJwt(method: string, path: string): string {
   const { keyId, rawSecret } = credentials();
   if (!keyId || !rawSecret) throw new Error('Coinbase CDP API key credentials are not configured.');
+  if (!keyId.startsWith('organizations/') || !keyId.includes('/apiKeys/')) {
+    throw new Error('COINBASE_API_KEY must be the full CDP key name in organizations/{org_id}/apiKeys/{key_id} format, not the display name or short key ID. Update it in Vercel without sharing it in chat.');
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const secret = rawSecret.replace(/\\n/g, '\n').trim();
@@ -93,13 +96,15 @@ async function privateRequest<T>(method: 'GET' | 'POST', path: string, body?: un
     },
   });
   const text = await response.text();
-  let data: any;
-  try { data = JSON.parse(text); } catch { throw new Error(`Invalid Coinbase private API response (HTTP ${response.status}).`); }
+  let data: any = null;
+  try { data = JSON.parse(text); } catch { /* Some gateway/auth failures return plain text. */ }
   if (!response.ok) {
-    const message = [data?.message, data?.error, data?.error_details]
-      .find((item) => typeof item === 'string' && item.length > 0);
-    throw new Error(`Coinbase private API HTTP ${response.status}: ${(message || 'Private API request rejected.').slice(0, 180)}`);
+    const message = [data?.message, data?.error, data?.error_details, text]
+      .find((item) => typeof item === 'string' && item.trim().length > 0);
+    const safeMessage = (message || 'Private API request rejected.').replace(/[\\r\\n\\t]+/g, ' ').slice(0, 180);
+    throw new Error(`Coinbase private API HTTP ${response.status}: ${safeMessage}`);
   }
+  if (data === null) throw new Error(`Invalid Coinbase private API response (HTTP ${response.status}).`);
   return data as T;
 }
 
