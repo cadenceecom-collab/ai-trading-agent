@@ -1,29 +1,105 @@
 'use client';
 import {useEffect,useState} from 'react';
-type Overview={account?:{name:string;base_currency:string;account_type:string}|null;positions:Array<{id:string;quantity:number;market_value:number|null;unrealized_pnl:number|null;assets?:{symbol:string}|null}>;signals:Array<{id:string;action:string;confidence:number|null;rationale:string|null;assets?:{symbol:string}|null}>;orders:Array<{id:string;side:string;status:string;quantity:number;assets?:{symbol:string}|null;venues?:{name:string}|null}>;riskRules:Array<{name:string;value:number;unit:string|null}>;tradingMode:string;liveTradingEnabled:boolean};
+
+type Overview={
+ account?:{name:string;base_currency:string;account_type:string}|null;
+ positions:Array<{id:string;quantity:number;market_value:number|null;unrealized_pnl:number|null;assets?:{symbol:string}|null}>;
+ signals:Array<{id:string;action:string;confidence:number|null;rationale:string|null;assets?:{symbol:string}|null}>;
+ orders:Array<{id:string;side:string;status:string;quantity:number;assets?:{symbol:string}|null;venues?:{name:string}|null}>;
+ riskRules:Array<{name:string;value:number;unit:string|null}>;
+ tradingMode:string;liveTradingEnabled:boolean
+};
 type Health={configured:boolean;connected?:boolean;authenticated?:boolean;reachable?:boolean;message?:string;demoConfigured?:boolean;privateCredentialsConfigured?:boolean};
 type KrakenBalance={asset:string;amount:number};
 type CryptoScan={symbol:string;action?:'buy'|'sell'|'hold';confidence?:number;score?:number;candleCount?:number;candleSource?:string|null;rationale?:string;features?:{latest:number;sma20:number|null;sma50:number|null;momentum20:number|null;spreadPct:number;venueCount:number};consensus?:{consensusPrice:number;spreadPct:number;venues:Array<{venue:string;price:number}>};error?:string};
+type ApiError={error?:string};
+const money=(n:number|null|undefined,currency='CAD')=>typeof n==='number'&&Number.isFinite(n)?new Intl.NumberFormat('en-CA',{style:'currency',currency,maximumFractionDigits:2}).format(n):'—';
+const pct=(n:number|null|undefined)=>typeof n==='number'&&Number.isFinite(n)?n.toFixed(2)+'%':'—';
+function actionClass(action?:string){return action==='buy'?'good':action==='sell'?'bad':'warn'}
+
 export default function Home(){
- const[data,setData]=useState<Overview|null>(null);const[error,setError]=useState('');const[ibkr,setIbkr]=useState<Health|null>(null);const[kraken,setKraken]=useState<Health|null>(null);const[bitget,setBitget]=useState<Health|null>(null);const[coinbase,setCoinbase]=useState<Health|null>(null);const[krakenBalances,setKrakenBalances]=useState<KrakenBalance[]|null>(null);const[krakenBalanceError,setKrakenBalanceError]=useState('');const[cryptoScans,setCryptoScans]=useState<CryptoScan[]>([]);const[saveSignalsState,setSaveSignalsState]=useState('');const[saveSignalsBusy,setSaveSignalsBusy]=useState(false);
- const load=()=>{fetch('/api/trading/overview').then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error??j.status??'Unable to load trading data');setData(j)}).catch(e=>setError(e.message));fetch('/api/brokers/ibkr/auth/status').then(r=>r.json()).then(setIbkr).catch(()=>setIbkr({configured:false,connected:false,authenticated:false,message:'IBKR auth check unavailable'}));fetch('/api/brokers/kraken/health').then(r=>r.json()).then(setKraken).catch(()=>setKraken({configured:false,reachable:false,message:'Kraken health check unavailable'}));fetch('/api/brokers/kraken/balance',{cache:'no-store'}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error??'Unable to load Kraken balances');setKrakenBalances(j.balances??[]);setKrakenBalanceError('')}).catch(e=>{setKrakenBalances(null);setKrakenBalanceError(e.message)});fetch('/api/brokers/bitget/health').then(r=>r.json()).then(setBitget).catch(()=>setBitget({configured:false,reachable:false,message:'Bitget health check unavailable'}));fetch('/api/brokers/coinbase/health').then(r=>r.json()).then(setCoinbase).catch(()=>setCoinbase({configured:false,reachable:false,message:'Coinbase health check unavailable'}));Promise.all(['BTC','ETH'].map(symbol=>fetch('/api/market/scan/crypto?symbol='+symbol,{cache:'no-store'}).then(r=>r.json()).catch(e=>({symbol,error:e.message})))).then(setCryptoScans)};
- useEffect(()=>{load()},[]);
- const saveCryptoSignals=async()=>{setSaveSignalsBusy(true);setSaveSignalsState('Saving BTC/ETH signals…');try{const r=await fetch('/api/market/scan/crypto/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbols:['BTC','ETH']})});const j=await r.json();if(!r.ok)throw new Error(j.error??'Unable to save signals');const saved=(j.results??[]).filter((x:{saved:boolean})=>x.saved).length;setSaveSignalsState(saved+' signal(s) saved. Refreshing dashboard…');await load();}catch(e){setSaveSignalsState(e instanceof Error?e.message:'Unable to save signals.')}finally{setSaveSignalsBusy(false)}};
- const portfolio=data?.positions.reduce((s,p)=>s+Number(p.market_value??0),0)??0;const pnl=data?.positions.reduce((s,p)=>s+Number(p.unrealized_pnl??0),0)??0;
- const brokerStatus=(h:Health|null)=>{if(!h)return'CHECKING';if(h.authenticated)return'AUTHENTICATED';if(h.demoConfigured)return'DEMO CREDENTIALS SET · AUTH NOT VERIFIED';if(h.privateCredentialsConfigured)return'PRIVATE CREDENTIALS SET · AUTH NOT VERIFIED';if(h.reachable)return'PUBLIC MARKET DATA READY · AUTH REQUIRED';if(h.configured)return'CONFIGURED · CONNECTION CHECK FAILED';return'NOT CONFIGURED'};
- return <main className="shell"><header className="topbar"><div><div className="brand">AI Trading Agent</div><div className="sub">Stocks + Crypto · web trading console</div></div><div className="status"><span className="dot"/>{data?.liveTradingEnabled?'LIVE TRADING ENABLED':'Live trading disabled'}</div></header>
- {error&&<div className="card warning">Database connection is not ready: {error}</div>}
- <section className="grid"><div className="card"><div className="label">Account</div><div className="value">{data?.account?.name??'Not connected'}</div><div className="sub">{data?.tradingMode??'paper'} mode</div></div><div className="card"><div className="label">Position value</div><div className="value">CA {portfolio.toLocaleString(undefined,{maximumFractionDigits:2})}</div><div className="sub">{data?.positions.length??0} positions</div></div><div className="card"><div className="label">Unrealized P&amp;L</div><div className={pnl>=0?'value positive':'value muted'}>{pnl>=0?'+':''}CA {pnl.toLocaleString(undefined,{maximumFractionDigits:2})}</div></div><div className="card"><div className="label">Risk rules</div><div className="value positive">LOCKED</div><div className="sub">{data?.riskRules.length??0} deterministic limits</div></div></section>
- <section className="card" style={{marginTop:16}}><div className="sectionTitle">Account Connections</div><div className="sub">Credentials stay server-side. Public market-data access is separate from private account authentication. Connect paper/demo accounts first; live trading remains locked.</div><div className="ruleGrid">
- <div className="rule"><span>IBKR · Web API</span><strong className={ibkr?.authenticated?'positive':'muted'}>{brokerStatus(ibkr)}</strong></div>
- <div className="rule"><span>Kraken · API</span><strong className={kraken?.authenticated?'positive':'muted'}>{brokerStatus(kraken)}</strong></div>
- <div className="rule"><span>Coinbase · Advanced Trade</span><strong className={coinbase?.authenticated?'positive':'muted'}>{brokerStatus(coinbase)}</strong></div>
- <div className="rule"><span>Bitget · Demo API</span><strong className={bitget?.authenticated?'positive':'muted'}>{brokerStatus(bitget)}</strong></div>
- </div>
- <div className="sub" style={{marginTop:10}}>Coinbase: {coinbase?.message??'checking'} · Bitget: {bitget?.message??'checking'}</div>
- <div className="sub" style={{marginTop:8}}>Coinbase private access requires server-side COINBASE_API_KEY and COINBASE_API_SECRET (the API key's private signing key). Bitget demo access requires BITGET_API_KEY, BITGET_API_SECRET and BITGET_API_PASSPHRASE from a demo-mode API key. Keep withdrawal permissions disabled.</div>
- </section>
- <section className="card" style={{marginTop:16}}><div className="sectionTitle">Crypto Market Scanner</div><div className="sub">Cross-exchange price consensus with technical signals. Saving records signals for review; it never submits orders.</div><div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginTop:12}}><button className="button" onClick={saveCryptoSignals} disabled={saveSignalsBusy}>{saveSignalsBusy?'Saving…':'Save BTC/ETH Signals'}</button>{saveSignalsState&&<span className="sub">{saveSignalsState}</span>}</div>{cryptoScans.length===0?<div className="empty">Loading BTC and ETH market data…</div>:<div className="ruleGrid">{cryptoScans.map(s=><div className="rule" key={s.symbol}><span><strong>{s.symbol}</strong><div className="sub">{s.consensus?.venues?.map(v=>v.venue).join(' · ')||s.error||'Waiting for quotes'}</div>{s.candleSource&&<div className="sub">Candles: {s.candleSource} ({s.candleCount??0})</div>}</span><strong className={s.action==='buy'?'positive':s.action==='sell'?'muted':''}>{s.consensus?.consensusPrice?new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',maximumFractionDigits:s.consensus.consensusPrice>100?2:4}).format(s.consensus.consensusPrice):'—'}<div className="sub">{s.action?.toUpperCase()??'NO SIGNAL'} · {s.score??'—'}/100 score</div></strong><div className="sub" style={{marginTop:8}}>{s.rationale??'Waiting for valid candle data.'}</div>{s.features&&<div className="sub">SMA20: {s.features.sma20===null?'—':s.features.sma20.toLocaleString(undefined,{maximumFractionDigits:2})} · SMA50: {s.features.sma50===null?'—':s.features.sma50.toLocaleString(undefined,{maximumFractionDigits:2})} · 20-day momentum: {s.features.momentum20===null?'—':`${s.features.momentum20.toFixed(2)}%`}</div>}{s.action==='hold'&&<div className="sub">Neutral reading; no trade suggested.</div>}</div>)}</div>}</section>
- <section className="card" style={{marginTop:16}}><div className="sectionTitle">Kraken Account Balances</div><div className="sub">Read-only account data from the authenticated Kraken API. Amounts are shown in each asset's native units, not converted to CAD.</div>{krakenBalanceError?<div className="empty">{krakenBalanceError}</div>:krakenBalances===null?<div className="empty">Loading Kraken balances…</div>:krakenBalances.length===0?<div className="empty">Kraken connected. No non-zero balances were returned.</div>:<div className="ruleGrid">{krakenBalances.map(b=><div className="rule" key={b.asset}><span>{b.asset}</span><strong>{b.amount.toLocaleString(undefined,{maximumFractionDigits:8})}</strong></div>)}</div>}</section>
- <section className="main"><div className="card"><div className="sectionTitle">AI Signals</div><div className="sub">Signals never bypass deterministic risk controls.</div>{(data?.signals??[]).length===0?<div className="empty">No signals yet.</div>:data!.signals.map(s=><div className="row" key={s.id}><div><div className="symbol">{s.assets?.symbol??'Unknown'}</div><div className="sub">{s.rationale??'No rationale'}</div></div><div>{s.action.toUpperCase()} · {s.confidence??0}%</div></div>)}</div><div className="card"><div className="sectionTitle">Paper Orders</div><div className="sub">No live broker orders are permitted.</div>{(data?.orders??[]).length===0?<div className="empty">No paper orders yet.</div>:data!.orders.map(o=><div className="row" key={o.id}><div><div className="symbol">{o.assets?.symbol??'Unknown'}</div><div className="sub">{o.venues?.name??'Unassigned venue'} · {o.quantity}</div></div><div>{o.side.toUpperCase()} · {o.status}</div></div>)}</div></section>
- <section className="card" style={{marginTop:16}}><div className="sectionTitle">Deterministic Risk Guardrails</div><div className="sub">AI decisions cannot override these limits.</div><div className="ruleGrid">{(data?.riskRules??[]).map(r=><div className="rule" key={r.name}><span>{r.name}</span><strong>{r.value}{r.unit==='percent'?'%':r.unit?' '+r.unit:''}</strong></div>)}</div></section></main>}
+ const [data,setData]=useState<Overview|null>(null);
+ const [health,setHealth]=useState<Record<string,Health>>({});
+ const [balances,setBalances]=useState<KrakenBalance[]>([]);
+ const [scans,setScans]=useState<CryptoScan[]>([]);
+ const [loading,setLoading]=useState(true);
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState('');
+ const [notice,setNotice]=useState('');
+
+ async function load(){
+  setLoading(true);setError('');
+  const results=await Promise.allSettled([
+   fetch('/api/trading/overview',{cache:'no-store'}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error??'Overview unavailable');return j as Overview}),
+   fetch('/api/brokers/connections',{cache:'no-store'}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error??'Connections unavailable');return j}),
+   fetch('/api/brokers/kraken/balance',{cache:'no-store'}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.error??'Kraken balance unavailable');return j as {balances?:KrakenBalance[]}}),
+  ]);
+  if(results[0].status==='fulfilled')setData(results[0].value);else setError(results[0].reason instanceof Error?results[0].reason.message:'Overview unavailable.');
+  if(results[1].status==='fulfilled')setHealth(results[1].value.connections??{});
+  if(results[2].status==='fulfilled')setBalances(results[2].value.balances??[]);
+  setLoading(false);
+ }
+ async function scanCrypto(){
+  setBusy(true);setError('');setNotice('');
+  try{
+   const out=await Promise.all(['BTC','ETH'].map(async symbol=>{
+    const response=await fetch('/api/market/scan/crypto?symbol='+symbol,{cache:'no-store'});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error??'Crypto scan failed for '+symbol);
+    return result as CryptoScan;
+   }));
+   setScans(out);setNotice('Market scan completed. These are technical signals, not guaranteed predictions.');
+  }catch(e){setError(e instanceof Error?e.message:'Crypto scan failed.')}finally{setBusy(false)}
+ }
+ async function saveScans(){
+  setBusy(true);setError('');setNotice('');
+  try{
+   const response=await fetch('/api/market/scan/crypto/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbols:scans.map(s=>s.symbol)})});
+   const result=await response.json();
+   if(!response.ok)throw new Error(result.error??'Unable to save signals');
+   setNotice('Signals saved to the database.');await load();
+  }catch(e){setError(e instanceof Error?e.message:'Unable to save signals')}finally{setBusy(false)}
+ }
+ useEffect(()=>{void load()},[]);
+ const connections=[['IBKR',health.ibkr],['Kraken',health.kraken],['Coinbase',health.coinbase],['Bitget',health.bitget]];
+ return <main className="shell">
+  <header className="topbar">
+   <div><div className="brand">AI Trading Agent</div><div className="sub">Stocks + crypto · Research and paper trading</div></div>
+   <div className="status"><span className="dot"/>{data?.tradingMode??'paper'} mode · live trading disabled</div>
+  </header>
+  <section className="grid">
+   <div className="card"><div className="label">Paper account</div><div className="value">{data?.account?.name??'Paper Trading'}</div><div className="delta">{data?.account?.base_currency??'CAD'} base currency · {data?.account?.account_type??'paper'}</div></div>
+   <div className="card"><div className="label">Open positions</div><div className="value">{data?.positions?.length??0}</div><div className="delta">Database-backed positions</div></div>
+   <div className="card"><div className="label">Saved signals</div><div className="value">{data?.signals?.length??0}</div><div className="delta">Rules-based technical scans</div></div>
+   <div className="card"><div className="label">Orders</div><div className="value">{data?.orders?.length??0}</div><div className="delta">Execution remains gated</div></div>
+  </section>
+  {error&&<div className="error" role="alert">{error}</div>}
+  {notice&&<div className="notice">{notice}</div>}
+  <section className="panel">
+   <div className="panelHead"><h2>Broker connections</h2><div className="actions"><button className="secondary" onClick={()=>void load()} disabled={loading}>Refresh</button></div></div>
+   <div className="connectionGrid">{connections.map(([name,h])=><div className="connection" key={name as string}><div className="connectionTop"><strong>{name as string}</strong><span className={'pill '+(h?.authenticated?'good':h?.reachable?'warn':'')}>{h?.authenticated?'AUTHENTICATED':h?.reachable?'PUBLIC DATA':'CHECK SETUP'}</span></div><div className="muted">{h?.message??'Connection status is loading.'}</div></div>)}</div>
+   <div className="muted" style={{marginTop:12}}>Public market data does not prove private account authentication. Live trading and order submission are disabled.</div>
+  </section>
+  <section className="panel">
+   <div className="panelHead"><h2>Crypto technical scanner</h2><div className="actions"><button onClick={()=>void scanCrypto()} disabled={busy}>{busy?'Working…':'Scan BTC + ETH'}</button><button className="secondary" onClick={()=>void saveScans()} disabled={busy||scans.length===0}>Save signals</button></div></div>
+   {scans.length===0?<div className="muted">Run a scan to fetch public market data and calculate technical indicators.</div>:<div className="tableWrap"><table><thead><tr><th>Asset</th><th>Action</th><th>Score</th><th>Price</th><th>20-day momentum</th><th>Candles</th><th>Analysis</th></tr></thead><tbody>{scans.map(s=><tr key={s.symbol}><td>{s.symbol}</td><td className={actionClass(s.action)}>{s.action?.toUpperCase()??'—'}</td><td>{s.score??s.confidence??'—'}</td><td>{money(s.consensus?.consensusPrice??s.features?.latest,'USD')}</td><td>{pct(s.features?.momentum20)}</td><td>{s.candleCount??'—'} {s.candleSource?'('+s.candleSource+')':''}</td><td>{s.rationale??s.error??'—'}</td></tr>)}</tbody></table></div>}
+  </section>
+  <section className="panel">
+   <div className="panelHead"><h2>Paper positions</h2><span className="muted">{data?.positions?.length??0} tracked</span></div>
+   {(data?.positions?.length??0)===0?<div className="muted">No saved positions yet.</div>:<div className="tableWrap"><table><thead><tr><th>Asset</th><th>Quantity</th><th>Market value</th><th>Unrealized P/L</th></tr></thead><tbody>{data!.positions.map(p=><tr key={p.id}><td>{p.assets?.symbol??'Unknown'}</td><td>{p.quantity}</td><td>{money(p.market_value)}</td><td>{money(p.unrealized_pnl)}</td></tr>)}</tbody></table></div>}
+  </section>
+  <section className="panel">
+   <div className="panelHead"><h2>Kraken balances</h2><span className="muted">Read-only private endpoint</span></div>
+   {balances.length===0?<div className="muted">No balances loaded. Confirm Kraken authentication or refresh.</div>:<div className="tableWrap"><table><thead><tr><th>Asset</th><th>Available balance</th></tr></thead><tbody>{balances.map((b,i)=><tr key={b.asset+i}><td>{b.asset}</td><td>{b.amount}</td></tr>)}</tbody></table></div>}
+  </section>
+  <section className="panel">
+   <div className="panelHead"><h2>Recent saved signals</h2><span className="muted">{data?.signals?.length??0} signals</span></div>
+   {(data?.signals?.length??0)===0?<div className="muted">No saved signals. Run the crypto scanner and choose Save signals, or load the stock scanner after market data ingestion.</div>:<div className="tableWrap"><table><thead><tr><th>Asset</th><th>Action</th><th>Confidence</th><th>Rationale</th></tr></thead><tbody>{data!.signals.map(s=><tr key={s.id}><td>{s.assets?.symbol??'—'}</td><td className={actionClass(s.action)}>{s.action.toUpperCase()}</td><td>{s.confidence??'—'}</td><td>{s.rationale??'—'}</td></tr>)}</tbody></table></div>}
+  </section>
+  <section className="panel">
+   <div className="panelHead"><h2>Deterministic risk limits</h2><span className="pill warn">Enforced before paper execution is enabled</span></div>
+   <div className="ruleGrid">{(data?.riskRules??[]).map(r=><div className="rule" key={r.name}><span>{r.name}</span><strong>{r.value}{r.unit==='percent'?'%':r.unit?' '+r.unit:''}</strong></div>)}</div>
+   <div className="muted" style={{marginTop:12}}>Default guardrails: max position 10%, daily loss 2%, trade risk 0.5%, crypto exposure 25%. Paper execution remains blocked until trusted server-side portfolio and market-price validation is in place.</div>
+  </section>
+ </main>
+}
