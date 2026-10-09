@@ -78,6 +78,16 @@ export async function GET() {
         {
           error: "Unable to load the trading overview from Supabase.",
           details: firstError.message,
+          supabaseDiagnostics: {
+            keyFormat: key.startsWith("sb_secret_")
+              ? "supabase_secret_key"
+              : key.startsWith("eyJ")
+                ? "legacy_jwt_key"
+                : "unknown",
+            errorCode: firstError.code ?? null,
+            errorHint: firstError.hint ?? null,
+            errorDetails: firstError.details ?? null,
+          },
           ...(networkFetchError ? { networkDiagnostics: networkFetchError } : {}),
           hostname,
           deploymentEnvironment: process.env.VERCEL_ENV ?? "unknown",
